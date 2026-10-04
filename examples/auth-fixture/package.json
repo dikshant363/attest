@@ -1,0 +1,12 @@
+{
+  "name": "auth-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A small but realistic HTTP service used as the target repository for Attest's end-to-end demonstration.",
+  "scripts": {
+    "start": "node --import tsx src/server.ts",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  }
+}

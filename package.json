@@ -1,0 +1,36 @@
+{
+  "name": "attest",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Autonomous engineering runtime with a persistent project world, safe checkpointed execution, continuous verification, and evidence-backed verdicts.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "bin": {
+    "attest": "./bin/attest.mjs"
+  },
+  "scripts": {
+    "attest": "tsx packages/cli/src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "node scripts/lint.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "tsc -p tsconfig.build.json",
+    "selftest": "npm run typecheck && npm run lint && npm run test",
+    "web:dev": "pnpm --dir apps/web dev",
+    "web:build": "pnpm --dir apps/web build",
+    "verify:all": "node scripts/verify-all.mjs"
+  },
+  "dependencies": {
+    "picocolors": "^1.1.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

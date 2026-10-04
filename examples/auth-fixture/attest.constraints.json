@@ -1,0 +1,12 @@
+[
+  {
+    "statement": "GET /health must remain reachable without authentication, because the platform health check calls it before any session exists.",
+    "enforcedBy": "tests/app.test.ts :: GET /health is public and reports ok",
+    "severity": "hard"
+  },
+  {
+    "statement": "GET /api/me must return 401 when the caller has no session.",
+    "enforcedBy": "tests/app.test.ts :: GET /api/me returns 401 without a session",
+    "severity": "hard"
+  }
+]
