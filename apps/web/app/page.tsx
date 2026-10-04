@@ -21,7 +21,7 @@ export default async function Dashboard() {
           analysed at:
         </p>
         <pre className="mono text-xs bg-[--color-ink-850] p-3 rounded border border-[--color-ink-800] overflow-x-auto">
-          {snap.projectDir}
+          {snap.worldFile}
         </pre>
         <p className="text-[--color-ink-300] text-sm mt-4">
           Run <span className="mono text-[--color-accent]">attest init --dir &lt;repo&gt;</span> first, or start this

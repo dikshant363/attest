@@ -149,8 +149,13 @@ Useful flags: `--max-attempts <n>`, `--dry-run`, `--offline`, `--no-review`,
 
 ## Control centre
 
+![The Attest control centre: a VERIFIED verdict, the verification layers, the constraints the agent had to respect, and the append-only audit log](docs/images/control-centre-dashboard.png)
+
 A read-only Next.js view over the Project World: task verdicts, the latest evidence record,
-verification layers, model usage with weight class, constraints, and the audit log.
+verification layers, acceptance-criteria coverage, model usage with weight class, constraints,
+and the audit log.
+
+![The evidence record for a task, showing the real failing assertion, the rollback, and the repairs attempted](docs/images/control-centre-evidence.png)
 
 ```bash
 cd apps/web && npm install
@@ -181,6 +186,14 @@ examples/auth-fixture/   the demonstration target repository
 
 ```
 npm run selftest      # typecheck + lint + 80 tests
+```
+
+A demonstration of the seal, in four commands:
+
+```bash
+attest verify                            # ✓ seal intact
+# edit .attest/world.json by hand, then:
+attest verify                            # ✗ SEAL BROKEN
 ```
 
 `npm test` runs 80 tests, including end-to-end tests that prove the recovery loop against a real
@@ -232,6 +245,22 @@ See [`docs/SECURITY.md`](docs/SECURITY.md) and [`docs/THREAT_MODEL.md`](docs/THR
 - Sessions, tasks and evidence live in a single JSON document under `.attest/`. That is a
   deliberate trade-off for a local tool, and the store interface is the seam for a database.
 - MCP server and external-agent delegation are designed for but not shipped in this version.
+
+## Documentation
+
+| Document | What it covers |
+|---|---|
+| [`docs/PROBLEM_STATEMENT.md`](docs/PROBLEM_STATEMENT.md) | The problem, with falsifiable claims |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | The design and every trade-off behind it |
+| [`docs/DECISIONS.md`](docs/DECISIONS.md) | 14 ADRs, including the decision that was wrong |
+| [`docs/DEMO.md`](docs/DEMO.md) | The demonstration, and exactly what is scripted |
+| [`docs/SECURITY.md`](docs/SECURITY.md) | What it protects, and what it does not |
+| [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) | 12 abuse paths, each rated enforced / mitigated / accepted |
+| [`docs/TESTING.md`](docs/TESTING.md) | What is tested and why |
+| [`docs/RESEARCH.md`](docs/RESEARCH.md) | Reuse-before-build audit and the competitor gap |
+| [`docs/SPONSOR_MATRIX.md`](docs/SPONSOR_MATRIX.md) | Sponsor technologies scored, with rejections recorded |
+| [`docs/TASKS.md`](docs/TASKS.md) | The plan, and what was deliberately cut |
+| [`docs/evidence/`](docs/evidence/) | Sealed evidence records from real runs, including a live failure |
 
 ## License
 
