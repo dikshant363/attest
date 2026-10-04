@@ -57,9 +57,10 @@ Every one of these is a P0 requirement. Status is honest — `[x]` means it work
 | P0-14 | Evidence assembly, digestion, sealing and markdown rendering | `[x]` |
 | P0-15 | CLI: 14 commands with strict flag validation | `[x]` |
 | P0-16 | Demo fixture: real service, real test suite, real constraint, real regression | `[x]` |
-| P0-17 | 80 tests including four end-to-end proofs | `[x]` |
+| P0-17 | 83 tests including four end-to-end proofs | `[x]` |
 | P0-19 | Acceptance-criteria coverage gate | `[x]` |
 | P0-20 | Sentry agent tracing (`gen_ai.*` spans, no-op without a DSN) | `[x]` |
+| P0-21 | Local envelope-capture tests proving the spans are really emitted | `[x]` |
 | P0-18 | `attest demo` scripted recovery demonstration | `[x]` |
 
 ## P1 — completed

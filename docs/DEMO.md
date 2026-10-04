@@ -224,5 +224,5 @@ Step 8 is the one that lands. Editing `verdict` to `VERIFIED` and watching the s
 For a judge who would rather run one command than watch a video:
 
 ```bash
-npm run selftest        # typecheck + lint + 67 tests, including the two end-to-end recovery tests
+npm run selftest        # typecheck + lint + 83 tests, including four end-to-end proofs
 ```

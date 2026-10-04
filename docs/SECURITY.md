@@ -174,7 +174,7 @@ standing grant.
 ## Verification of these claims
 
 ```bash
-npm run selftest            # 67 tests: typecheck + lint + unit + end-to-end
+npm run selftest            # 83 tests: typecheck + lint + unit + end-to-end
 node bin/attest.mjs tools   # the tool surface and its permission levels
 node bin/attest.mjs audit   # the audit trail a real run produced
 ```

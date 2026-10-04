@@ -199,6 +199,18 @@ export function captureError(err: unknown, context?: Record<string, string>): vo
   }
 }
 
+/**
+ * Reset module state.
+ *
+ * Exists so a test can point the SDK at a capturing endpoint on a fresh DSN. Not used by
+ * the runtime, and marked as such rather than hidden behind a build flag.
+ */
+export function _resetObservabilityForTests(): void {
+  sentry = undefined;
+  enabled = false;
+  initialised = false;
+}
+
 /** Flush pending events. Call before the process exits, or spans are lost. */
 export async function flushObservability(timeoutMs = 3000): Promise<void> {
   if (!enabled || !sentry) return;

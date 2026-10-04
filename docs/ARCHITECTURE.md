@@ -343,3 +343,4 @@ tool-safety story weaker, not stronger.
 6. `packages/agent-runtime/src/loop.ts` — the loop and its five invariants
 7. `packages/evidence/src/evidence.ts` — the receipt
 8. `tests/end-to-end.test.ts` — the claims, executed
+9. `packages/verification/src/coverage.ts` — the gate that stops a green suite from meaning "done"

@@ -7,7 +7,7 @@
  *
  *   1. typecheck        the runtime
  *   2. lint             project conventions and the prompt-injection notice
- *   3. test             80 tests, including four end-to-end proofs
+ *   3. test             83 tests, including four end-to-end proofs
  *   4. web build        the control centre, which also type-checks the app
  *   5. self-check       the CLI actually runs and reports a coherent world
  *
@@ -65,6 +65,6 @@ for (const step of steps) {
 process.stdout.write(
   failed
     ? "\n✗ verification failed\n"
-    : "\n✓ all checks passed: typecheck · lint · 80 tests · web build · cli smoke test\n",
+    : "\n✓ all checks passed: typecheck · lint · 83 tests · web build · cli smoke test\n",
 );
 process.exitCode = failed ? 1 : 0;

@@ -74,7 +74,7 @@ All must be true:
 - [x] The evidence record cannot be edited undetected
 - [x] The default path runs an open-weight model locally, with no API key
 - [x] A human can pause, inspect, and roll back at any point
-- [x] `npm run selftest` passes: typecheck, lint, 67 tests
+- [x] `npm run selftest` passes: typecheck, lint, 83 tests
 
 ## What is explicitly out of scope
 

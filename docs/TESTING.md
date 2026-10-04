@@ -21,7 +21,7 @@ belong. Coverage is not a goal; calibratable trust is.
 ## Running
 
 ```bash
-npm test            # vitest: 67 tests across 3 files
+npm test            # vitest: 83 tests across 4 files
 npm run typecheck   # tsc --noEmit, strict
 npm run lint        # project conventions + the injection-notice rule
 npm run selftest    # all three, in order
@@ -34,6 +34,7 @@ npm run selftest    # all three, in order
 | `tests/unit.test.ts` | unit | Path safety, command policy, the permission model, checkpoint/restore, output parsing, the security scan, `computeVerdict`, evidence sealing, diffing, CLI parsing, repository analysis |
 | `tests/router.test.ts` | unit | The open-weight refusal, offline mode, candidate ranking, fallback recording, probe honesty |
 | `tests/end-to-end.test.ts` | end-to-end | The whole loop against a real repository with a real `node:test` suite |
+| `tests/observability.test.ts` | integration | Sentry `gen_ai.*` spans really are emitted, captured by a local endpoint |
 
 ## The tests that matter most
 
@@ -112,6 +113,13 @@ is what varies in production, and its *contract* is tested separately via schema
 and the router tests.
 
 The live model path is exercised by the CLI itself (`attest demo`, `attest task`).
+
+## The Sentry tests do not need a Sentry account
+
+`tests/observability.test.ts` points the SDK at a local HTTP server that captures the envelopes it
+would have sent, then asserts the three span types arrive with the right attributes. So the claim
+"Attest emits `gen_ai` spans" is verifiable by anyone who clones the repository, whether or not they
+have a DSN — which is the only form in which that claim is worth making.
 
 ## What is not tested
 

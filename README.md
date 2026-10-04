@@ -185,7 +185,7 @@ examples/auth-fixture/   the demonstration target repository
 ## Verified, not claimed
 
 ```
-npm run selftest      # typecheck + lint + 80 tests
+npm run selftest      # typecheck + lint + 83 tests
 ```
 
 A demonstration of the seal, in four commands:
@@ -196,7 +196,7 @@ attest verify                            # ✓ seal intact
 attest verify                            # ✗ SEAL BROKEN
 ```
 
-`npm test` runs 80 tests, including end-to-end tests that prove the recovery loop against a real
+`npm test` runs 83 tests, including end-to-end tests that prove the recovery loop against a real
 repository with a real `node:test` suite: the regression is detected, the rollback is verified
 byte-for-byte, the repair is applied, and further scenarios prove that when the repair *also* fails
 the workspace is left exactly as it was found — and that a change passing every check while

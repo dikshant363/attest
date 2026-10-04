@@ -227,11 +227,24 @@ Verification substitutes for capability. That's the whole bet.
 
 ## My Agent Session
 
-<!-- Save the session with DevRelay and embed it here, or replace with the link. -->
+<!-- DevRelay was not used for this build. If you install it (curl -fsSL https://devrelay.com/install.sh | sh,
+     then sign in with MLH and ask your agent to save the session), replace this section with the link and
+     the agent_session tag. Otherwise leave it as written — it is accurate. -->
+
+I didn't use DevRelay, so rather than embed a transcript let me point at something better: **the tool records its own agent sessions, and they're in the repository.**
+
+Every task Attest runs produces a sealed evidence record. Two of them are committed from unscripted live runs on the local open-weight model, and they are more useful than a chat log because they're structured, verifiable, and include the parts a transcript leaves out:
+
+- [`docs/evidence/live-local-model-failed-safely.md`](https://github.com/dikshant363/attest/blob/main/docs/evidence/live-local-model-failed-safely.md) — the model broke the HTTP server, the tests caught it, and the workspace was restored byte-for-byte. Verdict: `ROLLED_BACK`.
+- [`docs/evidence/live-local-model-recovered.md`](https://github.com/dikshant363/attest/blob/main/docs/evidence/live-local-model-recovered.md) — the model violated a declared constraint, diagnosed its own violation from the failing assertion, and repaired it. Verdict: `VERIFIED`.
+
+Each one carries a digest, so you can confirm it hasn't been edited since it was written.
+
+The build process itself is documented the same way: [`docs/DECISIONS.md`](https://github.com/dikshant363/attest/blob/main/docs/DECISIONS.md) has all 14 architecture decisions including the two that were wrong, and [`docs/TASKS.md`](https://github.com/dikshant363/attest/blob/main/docs/TASKS.md) records what was cut and why.
 
 ## Prize Categories
 
-I'm entering the categories where the technology does real work in the architecture, and only those.
+I'm entering the categories where the technology does real work in the architecture, and only those. Everything below is either demonstrated in the repo or explicitly marked as not yet configured.
 
 ### Best Use of Gemma
 
@@ -241,7 +254,9 @@ I chose Gemma 4 over Gemma 3 for a specific, verifiable reason: Gemma 3 does **n
 
 ### Best Use of Sentry Agent Tracing
 
-<!-- TRACE LINK + SCREENSHOT GO HERE once the DSN is configured -->
+<!-- PENDING: paste the trace URL and a screenshot here once SENTRY_DSN is set.
+     Delete this comment and the note below when done. If the DSN is not configured before
+     submitting, REMOVE THIS SECTION — an unclaimed category is better than a claimed one. -->
 
 Attest emits three kinds of span:
 
@@ -254,6 +269,20 @@ Attest emits three kinds of span:
 One implementation detail worth calling out: **Sentry's Node SDK does not auto-instrument Ollama.** Its auto-instrumentation covers OpenAI, Anthropic, the Vercel AI SDK and LangChain. Since our whole point is the local open-weight path, I wrote the spans by hand against the `gen_ai` semantic conventions. That turned out to be a feature — the trace records what actually happened rather than what an integration assumed about a provider.
 
 Tracing is opt-in via `SENTRY_DSN` and costs nothing when disabled: the SDK is never even imported, so Attest still runs with no network at all.
+
+One thing I want to be precise about: I could not verify this against a real Sentry project without an account, so I verified it a different way. The test suite points the SDK at a **local HTTP server that captures the envelopes it would have sent**, and asserts that the three span types arrive with the right attributes:
+
+```ts
+expect(body).toContain("gen_ai.invoke_agent");
+expect(body).toContain("gen_ai.chat");
+expect(body).toContain("gen_ai.execute_tool");
+expect(body).toContain("gemma4:e2b");
+expect(body).toContain("open-weight");
+// and nothing that would leak the repository
+expect(body).not.toContain("TODO: sessions are not implemented");
+```
+
+That means the claim "Attest emits `gen_ai` spans" is verifiable by anyone who clones the repo, with or without a Sentry account. It is also, I think, the right instinct for this project: if a claim can't be checked by the person reading it, it's marketing.
 
 ### Best Use of Render
 
@@ -380,7 +409,7 @@ node bin/attest.mjs demo --dir examples/auth-fixture
 node bin/attest.mjs evidence --markdown --diff
 ```
 
-80 tests, including four end-to-end proofs: the recovery loop, safe failure when repair is impossible, the coverage gate catching an untested change, and a change that adds its own test being credited for it. Six runtime dependencies.
+83 tests, including four end-to-end proofs: the recovery loop, safe failure when repair is impossible, the coverage gate catching an untested change, and a change that adds its own test being credited for it. Six runtime dependencies.
 
 The docs are the part I'd point a reviewer at: [`ARCHITECTURE.md`](https://github.com/dikshant363/attest/blob/main/docs/ARCHITECTURE.md) for the design and its trade-offs, [`SECURITY.md`](https://github.com/dikshant363/attest/blob/main/docs/SECURITY.md) and [`THREAT_MODEL.md`](https://github.com/dikshant363/attest/blob/main/docs/THREAT_MODEL.md) for what it does *not* protect against, [`DECISIONS.md`](https://github.com/dikshant363/attest/blob/main/docs/DECISIONS.md) for the reasoning — including the decision that was wrong.
 
