@@ -50,7 +50,7 @@ Claude Code, Codex, Aider, Cline, Continue, OpenCode, Goose — these are good t
 
 Claude Code's checkpointing docs, for example, are unusually candid: checkpoints [don't track changes made by bash commands](https://code.claude.com/docs/en/checkpointing), don't restore subagent edits, aren't a replacement for version control, and rewind is user-initiated.
 
-Cline is the closest to what I wanted — it maintains a shadow git repository and commits after every tool use, which is genuinely clever. But **restore is a button.** Nothing fires it. If a test fails, Cline does not roll back, because nothing is watching the tests.
+Cline is the closest to what I wanted — it maintains a [shadow git repository](https://docs.cline.bot/core-workflows/checkpoints) and commits after every tool use, which is genuinely clever, and its docs are right that it makes the cost of a mistake nearly zero. But **restore is a button.** You click Restore next to a step. Nothing fires it automatically. If a test fails, Cline does not roll back, because nothing is watching the tests.
 
 That's the gap, and it's narrow and specific: **checkpointing exists, but evaluation doesn't gate anything.** The pieces are all there; the wire between them isn't.
 

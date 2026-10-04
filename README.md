@@ -261,6 +261,7 @@ See [`docs/SECURITY.md`](docs/SECURITY.md) and [`docs/THREAT_MODEL.md`](docs/THR
 | [`docs/SPONSOR_MATRIX.md`](docs/SPONSOR_MATRIX.md) | Sponsor technologies scored, with rejections recorded |
 | [`docs/TASKS.md`](docs/TASKS.md) | The plan, and what was deliberately cut |
 | [`docs/evidence/`](docs/evidence/) | Sealed evidence records from real runs, including a live failure |
+| [`docs/HANDOVER.md`](docs/HANDOVER.md) | Status, and the short list of things only a human can do |
 
 ## License
 
