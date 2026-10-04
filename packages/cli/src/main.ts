@@ -6,6 +6,14 @@ import { createDefaultRouter } from "@attest/model-router";
 import { ToolRuntime } from "@attest/tool-runtime";
 import { renderEvidenceMarkdown, renderEvidenceSummary } from "@attest/evidence";
 import type { RunEvent } from "@attest/agent-runtime";
+import {
+  captureError,
+  dsnPresent,
+  flushObservability,
+  initObservability,
+  isEnabled,
+  withSpan,
+} from "@attest/observability";
 import { flagBool, flagNumber, flagString, parseArgs, validateFlags } from "./args.ts";
 import { DEMO_REGRESSION, DEMO_REPAIR, DEMO_TASK } from "./demo-scenario.ts";
 
@@ -36,6 +44,7 @@ ${pc.bold("CONFIGURATION")}
   ${pc.cyan("models")} [--probe]          Which models the router can see, and why it picks one
   ${pc.cyan("tools")}                     The tool surface and its permission levels
   ${pc.cyan("audit")}                     Recent entries from the append-only audit log
+  ${pc.cyan("trace")} [--test]            Sentry agent-tracing status (set SENTRY_DSN to enable)
   ${pc.cyan("decision")} <title>          Record an architecture decision in the world
 
 ${pc.bold("COMMON OPTIONS")}
@@ -79,6 +88,10 @@ async function main(): Promise<number> {
   if (flagBool(flags, "offline")) process.env.ATTEST_OFFLINE = "1";
   if (flagBool(flags, "json")) process.env.ATTEST_QUIET = "1";
 
+  // Tracing is opt-in via SENTRY_DSN. With no DSN this is a no-op and the SDK is never
+  // imported, so `attest` continues to work with no network at all.
+  await initObservability();
+
   const root = rootOf(flags);
   const json = flagBool(flags, "json");
   const runtime = AttestRuntime.for({ root });
@@ -110,6 +123,8 @@ async function main(): Promise<number> {
       return cmdTools(runtime, root, json);
     case "audit":
       return cmdAudit(runtime, flags, json);
+    case "trace":
+      return cmdTrace(runtime, flags, json);
     case "decision":
       return cmdDecision(runtime, positionals, flags, json);
     case "demo":
@@ -626,6 +641,79 @@ async function cmdDecision(
 }
 
 /**
+ * Sentry agent-tracing status.
+ *
+ * Reported honestly: if no DSN is configured this says so rather than implying tracing is
+ * active. `--test` sends one span so the integration can be proven end to end instead of
+ * assumed, then flushes and reports whether the event was accepted.
+ */
+async function cmdTrace(_runtime: AttestRuntime, flags: Record<string, string | boolean>, json: boolean): Promise<number> {
+  const active = isEnabled();
+  const hasDsn = dsnPresent();
+  const masked = process.env.SENTRY_DSN
+    ? `${process.env.SENTRY_DSN.slice(0, 8)}…${process.env.SENTRY_DSN.slice(-4)}`
+    : undefined;
+
+  if (flagBool(flags, "test")) {
+    if (!active) {
+      if (json) console.log(JSON.stringify({ active: false, dsn: hasDsn, error: "set SENTRY_DSN to enable tracing" }));
+      else {
+        console.log(pc.yellow("tracing is not active"));
+        console.log(pc.dim("  set SENTRY_DSN to your Sentry project DSN, then re-run: attest trace --test"));
+      }
+      return 1;
+    }
+    await withSpan(
+      "attest.trace.probe",
+      "gen_ai.invoke_agent",
+      {
+        "gen_ai.operation.name": "invoke_agent",
+        "gen_ai.agent.name": "attest",
+        "attest.trace.probe": true,
+        "attest.models.local": process.env.ATTEST_OLLAMA_MODEL ?? "gemma4:e2b",
+      },
+      async (addAttributes) => {
+        addAttributes({ "attest.trace.probe.ok": true });
+        return true;
+      },
+    );
+    await flushObservability(5000);
+    if (json) console.log(JSON.stringify({ active: true, dsn: masked, sent: true }));
+    else {
+      console.log(`${pc.green("✓")} probe span sent and flushed`);
+      console.log(pc.dim("  open your Sentry project → Traces to see attest.trace.probe"));
+    }
+    return 0;
+  }
+
+  if (json) {
+    console.log(JSON.stringify({ active, dsnConfigured: hasDsn, dsn: masked, model: process.env.ATTEST_OLLAMA_MODEL ?? "gemma4:e2b" }));
+    return 0;
+  }
+
+  console.log(pc.bold("Sentry agent tracing"));
+  console.log(`  status          ${active ? pc.green("active") : pc.dim("inactive (no SENTRY_DSN)")}`);
+  console.log(`  DSN             ${masked ?? pc.dim("not set")}`);
+  console.log(`  environment     ${process.env.SENTRY_ENVIRONMENT ?? "local"}`);
+  console.log(`  sample rate     ${process.env.SENTRY_TRACES_SAMPLE_RATE ?? "1.0"}`);
+  console.log();
+  console.log(pc.bold("  spans emitted"));
+  console.log(`    gen_ai.invoke_agent   one per task, carrying the final verdict`);
+  console.log(`    gen_ai.chat           one per model call: model, provider, latency, tokens`);
+  console.log(`    gen_ai.execute_tool   one per tool call: tool, permission, mutating`);
+  console.log();
+  console.log(pc.dim("  Ollama is not auto-instrumented by the Sentry SDK, so these spans are written"));
+  console.log(pc.dim("  by hand against the gen_ai semantic conventions. Repository contents, prompts"));
+  console.log(pc.dim("  and diffs are never attached to a span."));
+  if (!active) {
+    console.log();
+    console.log(pc.dim("  to enable:  export SENTRY_DSN='https://…@…ingest.sentry.io/…'"));
+    console.log(pc.dim("  then:       attest trace --test"));
+  }
+  return 0;
+}
+
+/**
  * The scripted demonstration.
  *
  * Runs the real runtime against a real repository with a real test suite. The first edit
@@ -671,10 +759,14 @@ async function cmdDemo(runtime: AttestRuntime, flags: Record<string, string | bo
 }
 
 main()
-  .then((code) => {
+  .then(async (code) => {
+    // Spans are buffered; flush before exit or the trace is lost.
+    await flushObservability(5000);
     process.exitCode = code;
   })
-  .catch((err) => {
+  .catch(async (err) => {
+    captureError(err, { component: "cli" });
+    await flushObservability(5000);
     console.error(pc.red(`\nerror: ${err instanceof Error ? err.message : String(err)}`));
     if (process.env.ATTEST_DEBUG === "1" && err instanceof Error) console.error(err.stack);
     process.exitCode = 1;

@@ -1,5 +1,6 @@
 import type { FileChange, PermissionLevel, ToolCall } from "@attest/shared";
 import { boundJson, newId, nowIso, sha256 } from "@attest/shared";
+import { withToolSpan } from "@attest/observability";
 import { ToolError, type ToolContext, type ToolDefinition } from "./types.ts";
 import {
   applyEditsTool,
@@ -163,15 +164,22 @@ export class ToolRuntime {
     const timeoutMs = Math.min(tool.timeoutMs, ctx.timeoutMs ?? tool.timeoutMs);
     let timer: NodeJS.Timeout | undefined;
     try {
-      const output = await Promise.race([
-        tool.execute(parsed.data as never, ctx),
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(
-            () => reject(new ToolError(`tool "${name}" timed out after ${timeoutMs}ms`, "TIMEOUT")),
-            timeoutMs,
-          );
-        }),
-      ]);
+      const output = await withToolSpan(
+        { tool: name, permission: tool.permission, mutating: tool.mutating },
+        async (addAttributes) => {
+          const result = await Promise.race([
+            tool.execute(parsed.data as never, ctx),
+            new Promise<never>((_, reject) => {
+              timer = setTimeout(
+                () => reject(new ToolError(`tool "${name}" timed out after ${timeoutMs}ms`, "TIMEOUT")),
+                timeoutMs,
+              );
+            }),
+          ]);
+          addAttributes({ "attest.tool.ok": true });
+          return result;
+        },
+      );
 
       const fileChanges = toFileChanges(output);
       const call = base(true, undefined, output);

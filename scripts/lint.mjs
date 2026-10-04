@@ -36,7 +36,14 @@ async function walk(dir) {
 
 async function check(file, isScript = false) {
   const rel = path.relative(ROOT, file).split(path.sep).join("/");
-  if (rel.startsWith("examples/")) return; // the fixture is sample data, not our source
+  // examples/ is sample data, not our source.
+  if (rel.startsWith("examples/")) return;
+  // apps/web uses the Next.js bundler, which resolves extensionless relative imports.
+  // The explicit-extension rule exists because *Node* cannot, so it does not apply there.
+  const isBundled = rel.startsWith("apps/web/");
+  // Tests legitimately embed sample source as string literals (a fixture that writes
+  // `console.log(1)` into a file is testing the analyser, not printing to stdout).
+  const isTest = rel.startsWith("tests/");
   const source = await fs.readFile(file, "utf8");
   const lines = source.split("\n");
   const isCli = rel.includes("packages/cli/") || rel.startsWith("scripts/") || isScript;
@@ -56,7 +63,7 @@ async function check(file, isScript = false) {
         message: "library code must throw; only the CLI entry point may exit",
       });
     }
-    if (!isCli && /\bconsole\.(log|info)\s*\(/.test(line)) {
+    if (!isCli && !isTest && /\bconsole\.(log|info)\s*\(/.test(line)) {
       problems.push({
         file: rel,
         line: lineNo,
@@ -66,7 +73,7 @@ async function check(file, isScript = false) {
     }
     // Relative imports must be explicit about the .ts extension.
     const importMatch = line.match(/from\s+"(\.\.?\/[^"]+)"/);
-    if (importMatch && !/\.(ts|json|mjs|js)$/.test(importMatch[1])) {
+    if (!isBundled && importMatch && !/\.(ts|json|mjs|js)$/.test(importMatch[1])) {
       problems.push({
         file: rel,
         line: lineNo,

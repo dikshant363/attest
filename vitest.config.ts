@@ -13,6 +13,7 @@ export default defineConfig({
       "@attest/verification": r("./packages/verification/src/index.ts"),
       "@attest/evidence": r("./packages/evidence/src/index.ts"),
       "@attest/agent-runtime": r("./packages/agent-runtime/src/index.ts"),
+      "@attest/observability": r("./packages/observability/src/index.ts"),
       "@attest/core": r("./packages/core/src/index.ts"),
     },
   },

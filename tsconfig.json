@@ -25,6 +25,7 @@
       "@attest/verification": ["packages/verification/src/index.ts"],
       "@attest/evidence": ["packages/evidence/src/index.ts"],
       "@attest/agent-runtime": ["packages/agent-runtime/src/index.ts"],
+      "@attest/observability": ["packages/observability/src/index.ts"],
       "@attest/core": ["packages/core/src/index.ts"]
     }
   },

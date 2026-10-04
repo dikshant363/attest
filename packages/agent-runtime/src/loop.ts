@@ -20,6 +20,7 @@ import type {
   Verdict,
 } from "@attest/shared";
 import { newId, nowIso, readText, truncate, unifiedDiff, writeJsonAtomic } from "@attest/shared";
+import { withTaskSpan } from "@attest/observability";
 import { AgentTeam, type EditOutput } from "./agents.ts";
 import { renderProjectContext, type ProjectContextInput } from "./prompts.ts";
 
@@ -111,7 +112,34 @@ export class AgentLoop {
     opts.onEvent?.(e);
   }
 
+  /**
+   * Run one task.
+   *
+   * The whole loop is wrapped in a single `gen_ai.invoke_agent` span so the trace has one
+   * root to open, with `gen_ai.chat` and `gen_ai.execute_tool` spans beneath it. Verdict
+   * attributes are attached at the end, because the verdict is the answer the trace exists
+   * to explain.
+   */
   async run(opts: RunTaskOptions): Promise<RunTaskResult> {
+    return withTaskSpan(opts.intent, this.deps.store.project.id, async (addAttributes) => {
+      const result = await this.runInner(opts);
+      addAttributes({
+        "attest.verdict": result.task.verdict ?? "UNKNOWN",
+        "attest.task.status": result.task.status,
+        "attest.task.attempts": result.task.attempt,
+        "attest.evidence.id": result.evidence.id,
+        "attest.failures.count": result.evidence.failures.length,
+        "attest.repairs.count": result.evidence.repairs.length,
+        "attest.rollbacks.count": result.evidence.rollbacks.length,
+        "attest.tools.count": result.evidence.toolsUsed.length,
+        "attest.models.used": result.evidence.modelsUsed.map((m) => m.modelId).join(", "),
+        "attest.residual_risk.count": result.evidence.residualRisk.length,
+      });
+      return result;
+    });
+  }
+
+  private async runInner(opts: RunTaskOptions): Promise<RunTaskResult> {
     const { store, tools, verification } = this.deps;
     const maxAttempts = Math.max(1, opts.maxAttempts ?? 2);
     const project = store.project;

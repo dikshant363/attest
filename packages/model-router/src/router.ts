@@ -6,6 +6,7 @@ import type {
   ModelRun,
 } from "@attest/shared";
 import { nowIso, newId, sha256 } from "@attest/shared";
+import { withModelSpan } from "@attest/observability";
 import { loadRouterConfig, type RouterConfig } from "./config.ts";
 import { OllamaProvider } from "./providers/ollama.ts";
 import { OpenAICompatProvider } from "./providers/openai-compat.ts";
@@ -266,7 +267,26 @@ export class ModelRouter {
       if (!provider) continue;
       const started = Date.now();
       try {
-        const res = (await provider.complete(req, descriptor.id)) as ModelResponse<T>;
+        const res = (await withModelSpan(
+          {
+            role: req.role,
+            modelId: descriptor.id,
+            provider: descriptor.provider,
+            weightClass: descriptor.weightClass,
+            offline: descriptor.capabilities.offline,
+          },
+          async (addAttributes) => {
+            const response = (await provider.complete(req, descriptor.id)) as ModelResponse<T>;
+            addAttributes({
+              "gen_ai.usage.input_tokens": response.promptTokens,
+              "gen_ai.usage.output_tokens": response.completionTokens,
+              "attest.model.latency_ms": response.latencyMs,
+              "attest.model.schema_valid": response.schemaValid,
+              "attest.model.fell_back_from": response.fellBackFrom,
+            });
+            return response;
+          },
+        )) as ModelResponse<T>;
         const model = res.model;
         this.onSelect?.(req.role, descriptor, considered);
         this.record({

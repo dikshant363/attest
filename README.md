@@ -140,6 +140,7 @@ attest checkpoints                 # list reversible checkpoints
 attest models [--probe]            # models, policy, and measured capability
 attest tools                       # the tool surface and permission levels
 attest audit                       # append-only audit log
+attest trace [--test]              # Sentry agent-tracing status; --test proves it works
 ```
 
 Useful flags: `--max-attempts <n>`, `--dry-run`, `--offline`, `--no-review`,
@@ -166,6 +167,7 @@ packages/
   verification/     layered verification, test-output parsing, in-process security scan
   evidence/         evidence assembly, sealing, and human-readable rendering
   agent-runtime/    interpreter, planner, implementer, repairer, reviewer, the loop
+  observability/    Sentry agent tracing (gen_ai.* spans), no-op without a DSN
   core/             AttestRuntime — the facade every interface is built on
   cli/              the primary interface
 apps/web/           read-only control centre
@@ -184,6 +186,25 @@ npm run selftest      # typecheck + lint + 67 tests
 repository with a real `node:test` suite: the regression is detected, the rollback is verified
 byte-for-byte, the repair is applied, and a second scenario proves that when the repair *also*
 fails the workspace is left exactly as it was found.
+
+## Observability
+
+Tracing is opt-in and costs nothing when disabled — with no `SENTRY_DSN` the SDK is never even
+imported, so Attest still runs with no network at all.
+
+```bash
+export SENTRY_DSN='https://…@…ingest.sentry.io/…'
+attest trace --test        # sends one probe span and flushes it
+```
+
+| Span | Records |
+|---|---|
+| `gen_ai.invoke_agent` | one per task: final verdict, failure/repair/rollback counts, models used |
+| `gen_ai.chat` | one per model call: model, provider, latency, tokens, schema validity, fallback |
+| `gen_ai.execute_tool` | one per tool call: tool, permission level, whether it mutates |
+
+Sentry's Node SDK does not auto-instrument Ollama, so these spans are written by hand against the
+`gen_ai` semantic conventions. Repository contents, prompts and diffs are never attached to a span.
 
 ## Safety
 

@@ -1,0 +1,28 @@
+# Render Blueprint — Attest control centre
+#
+# The control centre is a read-only view over a Project World. On a hosted instance there
+# is no developer machine to analyse, so the deployment serves a committed snapshot of a
+# real run, produced by `scripts/bake-demo-world.mjs` from the actual demonstration.
+#
+# The snapshot is not a mock: it is the Project World and audit log that the real runtime
+# wrote while running the recovery demonstration against examples/auth-fixture.
+services:
+  - type: web
+    name: attest-control-centre
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm install --no-audit --no-fund && npm install --prefix apps/web --no-audit --no-fund && npm run build --prefix apps/web
+    startCommand: npm run start --prefix apps/web
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "22.11.0"
+      - key: NODE_ENV
+        value: production
+      # Serve the committed snapshot rather than trying to analyse a repository that is
+      # not present on the instance.
+      - key: ATTEST_WORLD_FILE
+        value: /opt/render/project/src/apps/web/data/world.json
+      - key: ATTEST_AUDIT_FILE
+        value: /opt/render/project/src/apps/web/data/audit.jsonl

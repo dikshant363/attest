@@ -279,6 +279,29 @@ proves a record is unmodified, not that it is true.
 No single layer is trusted. The prompt notice is a mitigation, not a guarantee — which is precisely
 why enforcement lives in the tool runtime and the verdict is computed from executed checks.
 
+## 10a. Observability
+
+Tracing is a cross-cutting concern rather than a layer, and it is deliberately **zero-cost when
+disabled**: with no `SENTRY_DSN`, `@sentry/node` is never imported and every helper is a pass-through.
+A tool that reads your source code must not require a network connection to run.
+
+Three span types, following the generative-AI semantic conventions:
+
+```
+gen_ai.invoke_agent   one per task        verdict, failure/repair/rollback counts, models used
+  ├── gen_ai.chat            per model call   model, provider, latency, tokens, schema valid, fallback
+  └── gen_ai.execute_tool    per tool call    tool, permission level, mutating
+```
+
+**Why hand-written.** Sentry's Node SDK auto-instruments OpenAI, Anthropic, the Vercel AI SDK and
+LangChain — and not Ollama, which is the default path here. Writing the spans explicitly follows
+from the same principle as the computed verdict: record what actually happened rather than what an
+integration assumed about a provider.
+
+**What is deliberately not sent:** file contents, prompts, diffs, and the developer's intent beyond a
+truncated summary. A trace explains *which model and which tool produced which outcome at what cost*,
+which is what you need to debug an agent; it is not a copy of the repository.
+
 ## 11. What was deliberately not built
 
 Desktop app, mobile, MCP server, external-agent delegation, vector memory, Temporal durability,
