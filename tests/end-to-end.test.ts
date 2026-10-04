@@ -78,7 +78,12 @@ async function copyFixture(name: string): Promise<string> {
   await fs.mkdir(TMP_BASE, { recursive: true });
   const dest = path.join(TMP_BASE, name);
   await fs.rm(dest, { recursive: true, force: true });
-  await fs.cp(FIXTURE, dest, { recursive: true });
+  // Exclude any .attest directory: a local run may have left a Project World in the source
+  // fixture, and a test must start from a clean repository.
+  await fs.cp(FIXTURE, dest, {
+    recursive: true,
+    filter: (src) => !src.split(path.sep).includes(".attest"),
+  });
   return dest;
 }
 
@@ -93,6 +98,18 @@ async function runFixtureTests(dir: string): Promise<{ ok: boolean; output: stri
 }
 
 beforeAll(async () => {
+  // The end-to-end tests assert against a pristine source repository, and the demonstration
+  // deliberately modifies it. Running `attest demo` and then the test suite without resetting
+  // produces failures that look like logic bugs but are just a dirty fixture — so fail with
+  // the fix instead.
+  const appSource = await fs.readFile(path.join(FIXTURE, "src", "app.ts"), "utf8");
+  if (!appSource.includes("TODO: sessions are not implemented yet")) {
+    throw new Error(
+      "examples/auth-fixture is not pristine — a previous run modified it.\n" +
+        "Fix it with:  npm run fixture:reset",
+    );
+  }
+  await fs.rm(TMP_BASE, { recursive: true, force: true });
   await fs.mkdir(TMP_BASE, { recursive: true });
 });
 
@@ -280,4 +297,147 @@ describe("end-to-end: verification refuses to overclaim", () => {
     expect(result.evidence.verification.skipped.some((s) => s.startsWith("unit"))).toBe(true);
     expect(result.evidence.residualRisk.some((r) => /no test command/i.test(r))).toBe(true);
   }, 240_000);
+});
+
+describe("end-to-end: a change that passes every check but implements nothing testable", () => {
+  /**
+   * This test encodes a real failure observed in a live run.
+   *
+   * A local open-weight model was asked to add session authentication. It added a session
+   * check to /api/me, never created a login route, and left dead code behind. Every layer the
+   * project declares passed — because the suite describes *existing* behaviour — and the
+   * runtime returned VERIFIED. A developer reading that would reasonably conclude the feature
+   * had been built. It had not.
+   *
+   * The verdict function was not wrong; it answered "did the checks pass?" while the developer
+   * was asking "did you do what I asked?". Acceptance-criteria coverage now asks the second
+   * question, and this test keeps it that way.
+   */
+  const CORRECT_BUT_UNTESTED = [
+    {
+      path: "src/app.ts",
+      content: `/**
+ * Request handling for the auth fixture service.
+ *
+ * Sessions are implemented, the health check stays public, and the 404 contract is intact.
+ * What is missing is any test for the login route — which is the whole point of this test.
+ */
+export interface Session { userId: string }
+export interface RequestLike {
+  method: string;
+  path: string;
+  headers: Record<string, string | undefined>;
+  body?: unknown;
+  session?: Session;
+}
+export interface ResponseLike { status: number; body?: unknown; headers?: Record<string, string> }
+
+const USERS: Record<string, string> = { ada: "correct-horse-battery-staple" };
+
+function json(status: number, body: unknown, headers?: Record<string, string>): ResponseLike {
+  return headers ? { status, body, headers } : { status, body };
+}
+
+export function handle(req: RequestLike): ResponseLike {
+  if (req.method === "GET" && req.path === "/health") {
+    return json(200, { status: "ok" });
+  }
+  if (req.method === "POST" && req.path === "/api/login") {
+    const body = (req.body ?? {}) as { username?: unknown; password?: unknown };
+    const session = verifyCredentials(body.username, body.password);
+    if (!session) return json(401, { error: "invalid_credentials" });
+    return json(200, { userId: session.userId }, {
+      "set-cookie": \`session=\${session.userId}; HttpOnly; SameSite=Lax\`,
+    });
+  }
+  if (req.path.startsWith("/api/")) {
+    if (!req.session?.userId) return json(401, { error: "unauthorized" });
+  }
+  if (req.method === "GET" && req.path === "/api/me") {
+    return json(200, { userId: req.session?.userId });
+  }
+  return json(404, { error: "not_found" });
+}
+
+export function verifyCredentials(username: unknown, password: unknown): Session | undefined {
+  if (typeof username !== "string" || typeof password !== "string") return undefined;
+  const expected = USERS[username];
+  if (expected === undefined || expected !== password) return undefined;
+  return { userId: username };
+}
+`,
+    },
+  ];
+
+  test(
+    "caps the verdict at PARTIALLY_VERIFIED and names the untested criterion",
+    async () => {
+      const workDir = await copyFixture("untested-behaviour");
+      const runtime = AttestRuntime.for({ root: workDir, router: mockRouter() });
+      await runtime.init();
+
+      const result = await runtime.runTask(DEMO_TASK, {
+        maxAttempts: 1,
+        skipReview: true,
+        injectRegression: CORRECT_BUT_UNTESTED,
+      });
+
+      // Every layer that ran, passed. The repository's own suite is green.
+      const unit = result.evidence.verification.layers.find((l) => l.layer === "unit");
+      expect(unit?.ran).toBe(true);
+      expect(unit?.ok).toBe(true);
+
+      // And yet: the change is not fully verified, because nothing tests the login route.
+      expect(result.task.verdict).toBe("PARTIALLY_VERIFIED");
+      expect(result.evidence.verdict).toBe("PARTIALLY_VERIFIED");
+
+      // The record names the gap precisely rather than gesturing at it.
+      expect(result.evidence.uncoveredCriteria.some((c) => c.includes("/api/login"))).toBe(true);
+      expect(
+        result.evidence.verification.rationale.some((r) => r.includes("/api/login")),
+      ).toBe(true);
+
+      // And it appears in the residual risk, which is what a developer actually reads.
+      expect(
+        result.evidence.residualRisk.some(
+          (r) => r.includes("/api/login") && /no test/i.test(r),
+        ),
+      ).toBe(true);
+
+      // The coverage table is in the record, so the claim is auditable.
+      const loginCriterion = result.evidence.acceptanceCoverage.find((c) => c.criterion.includes("/api/login"));
+      expect(loginCriterion).toBeDefined();
+      expect(loginCriterion!.covered).toBe(false);
+      expect(loginCriterion!.concrete).toBe(true);
+
+      // The change itself is fine, and the workspace is consistent.
+      const fixtureResult = await runFixtureTests(workDir);
+      expect(fixtureResult.ok, fixtureResult.output.slice(-2000)).toBe(true);
+      expect(verifyEvidenceDigest(result.evidence).valid).toBe(true);
+    },
+    240_000,
+  );
+
+  test(
+    "credits a change that adds a test for the behaviour it built",
+    async () => {
+      const workDir = await copyFixture("tested-behaviour");
+      const runtime = AttestRuntime.for({ root: workDir, router: mockRouter() });
+      await runtime.init();
+
+      const result = await runtime.runTask(DEMO_TASK, {
+        maxAttempts: 1,
+        skipReview: true,
+        // The full recorded repair includes a test for the login route.
+        injectRegression: DEMO_REPAIR,
+      });
+
+      expect(result.task.verdict).toBe("VERIFIED");
+      expect(result.evidence.uncoveredCriteria).toEqual([]);
+      // The newly added test file was picked up and run.
+      const unit = result.evidence.verification.layers.find((l) => l.layer === "unit");
+      expect(unit?.ok).toBe(true);
+    },
+    240_000,
+  );
 });

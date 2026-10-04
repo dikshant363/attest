@@ -29,6 +29,8 @@ export interface BuildEvidenceInput {
   rollbacks: { checkpointRef: string; ok: boolean; at: string }[];
   interpretation: string;
   interpretationProvenance: EvidenceRecord["interpretationProvenance"];
+  acceptanceCoverage?: EvidenceRecord["acceptanceCoverage"];
+  uncoveredCriteria?: string[];
   finalDiff: string;
   verdict: Verdict;
   residualRisk: string[];
@@ -88,6 +90,8 @@ export function buildEvidence(input: BuildEvidenceInput): EvidenceRecord {
     })),
     repairs: input.repairs,
     rollbacks: input.rollbacks,
+    acceptanceCoverage: input.acceptanceCoverage ?? [],
+    uncoveredCriteria: input.uncoveredCriteria ?? [],
     finalDiff: input.finalDiff,
     verification,
     verdict: input.verdict,
@@ -153,6 +157,7 @@ export function digestEvidence(record: EvidenceRecord): string {
     failures: record.failures,
     repairs: record.repairs,
     rollbacks: record.rollbacks,
+    uncoveredCriteria: record.uncoveredCriteria,
     verdict: record.verdict,
     verdictReasons: record.verdictReasons,
     generatedAt: record.generatedAt,

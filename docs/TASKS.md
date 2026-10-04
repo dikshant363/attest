@@ -57,7 +57,9 @@ Every one of these is a P0 requirement. Status is honest — `[x]` means it work
 | P0-14 | Evidence assembly, digestion, sealing and markdown rendering | `[x]` |
 | P0-15 | CLI: 14 commands with strict flag validation | `[x]` |
 | P0-16 | Demo fixture: real service, real test suite, real constraint, real regression | `[x]` |
-| P0-17 | 67 tests including two end-to-end recovery proofs | `[x]` |
+| P0-17 | 80 tests including four end-to-end proofs | `[x]` |
+| P0-19 | Acceptance-criteria coverage gate | `[x]` |
+| P0-20 | Sentry agent tracing (`gen_ai.*` spans, no-op without a DSN) | `[x]` |
 | P0-18 | `attest demo` scripted recovery demonstration | `[x]` |
 
 ## P1 — completed
@@ -68,7 +70,7 @@ Every one of these is a P0 requirement. Status is honest — `[x]` means it work
 | P1-2 | Model router with measured capability probe | `[x]` | `attest models --probe` |
 | P1-3 | Persistent project memory with keyword retrieval | `[x]` | used to feed context to later tasks |
 | P1-4 | Independent reviewer routed away from the author | `[x]` | `excludeModels` / `excludeProviders` |
-| P1-5 | Observability | `[x]` | audit log + `modelRuns` with latency and token counts |
+| P1-5 | Observability | `[x]` | audit log, `modelRuns`, and hand-written Sentry `gen_ai.*` spans |
 | P1-6 | Token/latency tracking per model call | `[x]` | recorded in `ModelRun` |
 | P1-7 | Human override: pause/resume/cancel/approve/reject/rollback | `[x]` | `recordHumanOverride`, `attest rollback` |
 
@@ -79,7 +81,7 @@ Every one of these is a P0 requirement. Status is honest — `[x]` means it work
 | P1-8 | **MCP server** | The tool registry is already the right shape, but a half-wired MCP server would add a *new path that bypasses the permission model*. Shipping it would weaken the tool-safety story rather than strengthen it. Designed for; not shipped. |
 | P1-9 | **External agent delegation** (Antigravity, Claude Code, Codex) | Requires a stable structured-result contract and per-agent sandboxing. Rushing it would produce an unaudited write path. |
 | P1-10 | **Temporal durability** | `temporal server start-dev` is available locally and the loop is a clean state machine, but the Workflow/Activity refactor is 4h+ and the checkpoint-and-rollback guarantee is worth more than durable execution at this scale. Described in `DECISIONS.md` ADR-008. |
-| P1-11 | **Sentry agent tracing** | Instrumentation for a local model must be hand-written (`gen_ai.*` spans) because SDK auto-instrumentation does not cover Ollama, and it needs a DSN. The audit log and `modelRuns` cover the same questions locally. Documented in `SPONSOR_MATRIX.md`. |
+| P1-11 | ~~Sentry agent tracing~~ | **Shipped** — hand-written `gen_ai.*` spans, since SDK auto-instrumentation does not cover Ollama. Zero cost when `SENTRY_DSN` is unset. |
 
 ## P2 — cut
 
@@ -112,6 +114,13 @@ Recorded because it is the useful part for anyone reading this later.
    which also turns a plausible-sounding verdict into an honest one.
 5. **Prompt injection without depending on the model.** The resolution is not a better prompt; it is
    making sure nothing security-relevant depends on the prompt at all.
+6. **The product failed its own promise, and a live run caught it.** A local model was asked to add
+   authentication, added a session check to `/api/me`, never created a login route, and left dead code
+   behind. All five tests passed, because they describe *existing* behaviour. Attest returned
+   `VERIFIED`. The verdict function was correct and the product was still misleading. Fixed by adding
+   an acceptance-criteria coverage gate — see `DECISIONS.md` ADR-014. This is the strongest evidence
+   for the project's own thesis: a claim of success is not evidence of success, and the only way to
+   find that out about your own tool is to run it and look.
 
 ## Milestones
 
@@ -125,3 +134,4 @@ Recorded because it is the useful part for anyone reading this later.
 | T+8:30–10:00 | E2E tests, demo script, evidence capture | `[x]` |
 | T+10:00–12:00 | Documentation set, DEV write-up | `[x]` |
 | T+12:00–13:00 | Final verification: typecheck · lint · test · live demo | `[x]` |
+| T+13:00+ | Live runs on the local model; coverage gate added in response to an observed failure | `[x]` |

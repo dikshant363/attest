@@ -92,8 +92,8 @@ export class ModelRouter {
   }
 
   private buildProviders(): void {
-    const { ollamaUrl, timeoutMs, gatewayUrl, allowGateway } = this.config;
-    this.providers = [new OllamaProvider(ollamaUrl, timeoutMs)];
+    const { ollamaUrl, timeoutMs, gatewayUrl, allowGateway, ollamaDisableThinking } = this.config;
+    this.providers = [new OllamaProvider(ollamaUrl, timeoutMs, ollamaDisableThinking)];
     if (allowGateway) {
       this.providers.push(new OpenAICompatProvider("gateway", gatewayUrl, timeoutMs));
     }

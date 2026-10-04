@@ -392,7 +392,24 @@ export interface EvidenceRecord {
   repairs: { attempt: number; description: string; outcome: "resolved" | "unresolved" }[];
   /** 11. Rollbacks performed. */
   rollbacks: { checkpointRef: string; ok: boolean; at: string }[];
-  /** 12. The final diff. */
+  /**
+   * 12. Whether the repository's tests exercise each acceptance criterion.
+   *
+   * Added after an observed failure: a change can pass every check the project declares while
+   * implementing none of the request, because the suite describes existing behaviour. This
+   * field is how the record distinguishes "the checks passed" from "the thing you asked for
+   * was tested".
+   */
+  acceptanceCoverage: {
+    criterion: string;
+    covered: boolean;
+    signals: string[];
+    matchedSignals: string[];
+    concrete: boolean;
+  }[];
+  /** Criteria that name a concrete surface and are referenced by no test. */
+  uncoveredCriteria: string[];
+  /** 13. The final diff. */
   finalDiff: string;
   /** 13. Verification outcome. */
   verification: VerificationResult;

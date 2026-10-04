@@ -280,6 +280,76 @@ cache, no second source of truth to drift.
 
 ---
 
+## ADR-014 — Acceptance-criteria coverage gates the verdict *(the most important bug found)*
+
+**Context.** During final verification I ran the live path — a real local open-weight model, a real
+repository, no scripted edits — and asked it to add session authentication.
+
+The model added a session check to `/api/me`, never created a login route, and left an unreachable
+duplicate `return` statement behind. It implemented essentially none of the request.
+
+Then every layer passed:
+
+```
+✓ security: no findings in 1 changed file(s)
+✓ unit: 5/5 passing
+✓ typecheck: exited 0
+✓ regression: baseline preserved (5 → 5 passing)
+VERDICT VERIFIED
+```
+
+**Why this was so serious.** The verdict function was not wrong. Every check that ran did pass, and
+the baseline was honoured. But `VERIFIED` is read by a human as *"the thing you asked for is done"*,
+and it was not done. The engine answered "did the checks pass?" while the developer was asking "did
+you do what I asked?".
+
+This is the exact failure mode the project exists to prevent, produced by the project, in the one code
+path that is supposed to be the safeguard. If I had not run the live path and read the diff, the
+write-up would have claimed a guarantee the tool did not provide.
+
+**Root cause.** Verification checks *the repository's* declared checks. A repository's tests describe
+behaviour that already exists. Adding a new behaviour does not make any existing test fail, so a suite
+that is green before the change is still green after a change that does nothing useful. "All checks
+pass" is a much weaker statement than it feels like.
+
+**Alternatives.** (a) Accept it; document that verification is only as strong as the project's tests.
+(b) Require the agent to always write tests, and fail if it does not. (c) Check whether the repository's
+tests exercise the acceptance criteria, and cap the verdict when they do not.
+
+**Chosen.** (c), with (a) documented alongside it.
+
+**Why.** (a) is true but insufficient: it is a caveat in a doc that nobody reads at the moment they
+read the word `VERIFIED`. (b) is too blunt — not every criterion is testable in a unit test, and an
+agent writing a meaningless test to satisfy a gate would be worse than no gate. (c) targets the actual
+question, and its weakness is visible in the record.
+
+**Implementation.** For each acceptance criterion, extract concrete signals: HTTP routes, quoted
+literals, and distinctive identifiers. Search the repository's test files — plus any test file the
+change itself created — for those signals. A criterion naming a concrete surface that appears in no
+test caps the verdict at `PARTIALLY_VERIFIED` and appears in the residual risk.
+
+**Two bugs found while building it, both worth recording:**
+
+1. **The loop recomputed the verdict and threw the cap away.** The engine produced a coverage-aware
+   verdict; `AgentLoop` then called `computeVerdict(outcome.layers)` again without coverage and
+   overwrote it. A safety gate that is bypassed by a redundant re-computation is not a gate. The loop
+   now reads `outcome.verification.verdict` and no longer computes one — the engine is the single site
+   where a verdict is produced.
+2. **A false positive on a criterion naming the test command.** "Running `npm run test` must pass" was
+   flagged as uncovered, because no *test file* contains the string `npm run test` — even though the
+   `unit` layer runs exactly that. A check that cries wolf conditions developers to ignore it, which is
+   worse than not shipping it. Criteria naming a project-declared command are now covered by
+   definition.
+
+**Trade-off.** The check is a heuristic. It detects whether a test *references* a surface, not whether
+the test asserts anything. It can be satisfied by an empty test. It is documented as a smoke alarm in
+the record itself, in `ARCHITECTURE.md`, and in the README's limitations. Overstating it would repeat
+the original mistake at one remove.
+
+**Lesson.** The most valuable thing that happened in this build was running the tool on itself and
+reading the output honestly. A test suite that passes is evidence about the tests, not about the
+product.
+
 ## Decision index
 
 | ADR | Decision | Status |

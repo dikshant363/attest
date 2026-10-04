@@ -21,7 +21,9 @@
     "selftest": "npm run typecheck && npm run lint && npm run test",
     "web:dev": "pnpm --dir apps/web dev",
     "web:build": "pnpm --dir apps/web build",
-    "verify:all": "node scripts/verify-all.mjs"
+    "verify:all": "node scripts/verify-all.mjs",
+    "fixture:reset": "rm -rf examples/auth-fixture/.attest examples/auth-fixture/src/middleware examples/auth-fixture/tests/auth.test.ts && git checkout -- examples/auth-fixture",
+    "pretest": "node scripts/reset-fixture.mjs"
   },
   "dependencies": {
     "picocolors": "^1.1.1",

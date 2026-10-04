@@ -212,6 +212,55 @@ export default async function EvidencePage({ params }: { params: Promise<{ id: s
 
       <section className="card">
         <div className="px-5 py-3 border-b border-[--color-ink-800] text-sm font-medium">
+          Acceptance criteria coverage
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <tbody className="divide-y divide-[--color-ink-850]">
+              {(record.acceptanceCoverage ?? []).length === 0 && (
+                <tr>
+                  <td className="px-5 py-4 text-[--color-ink-400] text-sm">
+                    No acceptance criteria were recorded for this task.
+                  </td>
+                </tr>
+              )}
+              {(record.acceptanceCoverage ?? []).map((c, i) => (
+                <tr key={i}>
+                  <td
+                    className={`px-5 py-2 mono text-xs w-28 ${
+                      c.signals.length === 0
+                        ? "text-[--color-ink-400]"
+                        : c.covered
+                          ? "text-[--color-verify]"
+                          : c.concrete
+                            ? "text-[--color-danger]"
+                            : "text-[--color-ink-400]"
+                    }`}
+                  >
+                    {c.signals.length === 0
+                      ? "not assessable"
+                      : c.covered
+                        ? "exercised"
+                        : c.concrete
+                          ? "NOT TESTED"
+                          : "not assessable"}
+                  </td>
+                  <td className="px-2 py-2 text-xs text-[--color-ink-300]">{c.criterion}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="px-5 py-3 border-t border-[--color-ink-850] text-xs text-[--color-ink-400]">
+          This checks whether a test <span className="italic">references</span> the surface named by the
+          criterion, not whether the test asserts anything useful. It is a smoke alarm: a change can pass every
+          check a project declares while implementing none of the request, because the suite describes existing
+          behaviour.
+        </div>
+      </section>
+
+      <section className="card">
+        <div className="px-5 py-3 border-b border-[--color-ink-800] text-sm font-medium">
           Tools used &amp; models used
         </div>
         <Row label="tools">

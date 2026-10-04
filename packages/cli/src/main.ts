@@ -378,7 +378,9 @@ async function cmdEvidence(
     console.error(pc.red(`error: no evidence record "${id}"`));
     return 1;
   }
-  if (flagBool(flags, "export")) {
+  // `--export` may be given bare (default path) or with an explicit path, so test for the
+  // flag's presence rather than for a boolean value — flagBool() would be false here.
+  if (flags.export !== undefined) {
     const target = await runtime.exportEvidenceReport(id, flagString(flags, "export") || undefined);
     console.log(`${pc.green("✓")} exported to ${target}`);
     return 0;
@@ -562,6 +564,7 @@ async function cmdModels(runtime: AttestRuntime, flags: Record<string, string | 
   console.log(`  offline only        ${cfg.offlineOnly ? pc.green("YES") : "no"}`);
   console.log(`  hosted gateway      ${cfg.allowGateway ? "enabled" : pc.dim("disabled")}`);
   console.log(`  local model         ${cfg.ollamaModel}`);
+  console.log(`  thinking output     ${cfg.ollamaDisableThinking ? "disabled (deterministic JSON)" : pc.yellow("enabled")}`);
   console.log(`  gateway model       ${cfg.gatewayModel}`);
   console.log();
   console.log(pc.bold("Models visible to the router"));

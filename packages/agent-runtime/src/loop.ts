@@ -4,7 +4,6 @@ import type { WorldStore } from "@attest/project-world";
 import type { ToolRuntime } from "@attest/tool-runtime";
 import { CheckpointManager } from "@attest/tool-runtime";
 import type { Baseline, VerificationEngine } from "@attest/verification";
-import { computeVerdict } from "@attest/verification";
 import { buildEvidence } from "@attest/evidence";
 import type {
   EvidenceRecord,
@@ -80,7 +79,8 @@ export interface RunTaskResult {
  *
  * Invariants enforced here, not by convention:
  *   1. No mutation happens outside a checkpoint.
- *   2. A verdict comes only from computeVerdict(), never from a model.
+ *   2. A verdict comes only from the VerificationEngine's computeVerdict(), never from a
+ *      model and never recomputed here.
  *   3. A failed attempt is rolled back before it is repaired.
  *   4. The loop stops on its own after maxAttempts and reports, rather than thrashing.
  *   5. An Evidence record is produced on every terminal path, including failure.
@@ -423,6 +423,7 @@ export class AgentLoop {
         taskId: task.id,
         executionId: execution.id,
         changedPaths: fileChanges.map((c) => c.path),
+        acceptanceCriteria: freshTask.intent.acceptanceCriteria,
         baseline,
         timeoutMs: opts.timeoutMs ?? 300_000,
         onLayer: (layer, status, ok) => this.emit(opts, { type: "layer", layer, status, ok }),
@@ -432,12 +433,17 @@ export class AgentLoop {
       this.lastTestRuns = outcome.layers
         .filter((l): l is typeof l & { testRun: TestRun } => Boolean(l.testRun))
         .map((l) => l.testRun);
+      this.lastCoverage = outcome.coverage;
       await store.updateExecution(execution.id, {
         testRunIds: outcome.layers.filter((l) => l.testRun).map((l) => l.testRun!.id),
       });
 
       const layerResults = outcome.layers.map((l) => l.result);
-      const { verdict } = computeVerdict(outcome.layers);
+      // Use the verdict the engine already computed. Recomputing it here from the layer
+      // results alone silently discarded the acceptance-criteria coverage cap, which meant a
+      // change implementing none of the request could still come back VERIFIED. The engine is
+      // the single place a verdict is produced; the loop only reads it.
+      const verdict: Verdict = outcome.verification.verdict;
       finalVerdict = verdict;
 
       if (verdict === "VERIFIED" || verdict === "PARTIALLY_VERIFIED") {
@@ -665,6 +671,14 @@ export class AgentLoop {
     if (finalVerdict === "BLOCKED") {
       residualRisk.push("The task could not be completed. Manual intervention is required.");
     }
+    if (this.lastCoverage && !this.lastCoverage.unassessable) {
+      for (const criterion of this.lastCoverage.uncoveredConcrete) {
+        residualRisk.push(
+          `No test in this repository exercises the acceptance criterion "${criterion}". ` +
+            `The checks that ran do not cover it, so passing them is not evidence for it.`,
+        );
+      }
+    }
     if (ambiguities.length) {
       residualRisk.push(`The request was ambiguous: ${ambiguities.join("; ")}`);
     }
@@ -696,6 +710,8 @@ export class AgentLoop {
       modelRuns: this.modelRuns,
       repairs,
       rollbacks: allRollbacks,
+      acceptanceCoverage: this.lastCoverage?.results ?? [],
+      uncoveredCriteria: this.lastCoverage?.uncoveredConcrete ?? [],
       interpretation,
       interpretationProvenance: interpretationProvenance as never,
       finalDiff,
@@ -747,6 +763,8 @@ export class AgentLoop {
 
   /** Collected during verification so evidence can cite real test counts. */
   private lastTestRuns: TestRun[] = [];
+  /** Coverage from the final attempt, so evidence can say what was never exercised. */
+  private lastCoverage: import("@attest/verification").CoverageReport | undefined;
 
   private async rollback(
     checkpointId: string,

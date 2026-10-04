@@ -183,6 +183,7 @@ lint       the project's own lint command                       optional
 build      the project's own build command                      optional
 e2e        the project's own e2e command                        optional
 regression baseline test counts compared to the post-change run optional
+coverage   is each acceptance criterion referenced by a test?   gates VERIFIED
 ```
 
 **A pre-flight baseline runs before any mutation.** This is what lets Attest distinguish "I broke it"
@@ -196,9 +197,28 @@ model, no clock, and no I/O in the path. Same inputs, same verdict, always.
 any required layer failed                      → UNVERIFIED
 a required layer could not run                 → UNVERIFIED   ← absence of evidence ≠ success
 only optional layers failed                    → PARTIALLY_VERIFIED
-all required layers pass                       → VERIFIED
+all required layers pass, but a concrete
+  acceptance criterion is untested             → PARTIALLY_VERIFIED
+all required layers pass and coverage holds    → VERIFIED
 skipped optional layers                        → reported, never counted as passing
 ```
+
+**The coverage gate, and why it exists.** A change can pass a repository's entire test suite while
+implementing none of the request, because the suite describes *existing* behaviour. That is not a
+hypothetical: it happened in a live run of this tool (see `DECISIONS.md` ADR-014). The verdict function
+was not wrong — it answered "did the checks pass?" while the developer was asking "did you do what I
+asked?". Coverage asks the second question: for each acceptance criterion, does any test file
+*reference* the surface it names (an HTTP route, a quoted literal, a distinctive identifier)? A
+criterion naming a concrete surface that no test references caps the verdict.
+
+It is deliberately a heuristic and is labelled as one in the record. It reasons about whether a test
+*mentions* a surface, not whether it asserts anything useful. It is a smoke alarm. A smoke alarm that
+says "nothing here tests the route you just added" is worth having; a claim that coverage is proven
+would not be.
+
+Criterion signals that name a command the project declares (`npm run test`) are excluded, because the
+layer that runs that command already satisfies them. That exclusion came from an observed false
+positive which would have taught developers to ignore the check entirely.
 
 **Skipped layers are named.** "Not checked: lint, build, e2e" appears in the record. A developer who
 does not know what was skipped cannot calibrate their trust.

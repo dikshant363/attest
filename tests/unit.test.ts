@@ -15,6 +15,7 @@ import { CheckpointManager } from "@attest/tool-runtime";
 import { parseTestOutput, failureExcerpt } from "@attest/verification";
 import { scanTextForSecrets, isBlocking } from "@attest/verification";
 import { computeVerdict, type LayerRun } from "@attest/verification";
+import { assessAcceptanceCoverage, extractSignals } from "@attest/verification";
 import { digestEvidence, verifyEvidenceDigest } from "@attest/evidence";
 import { renderEvidenceMarkdown, renderEvidenceSummary } from "@attest/evidence";
 import { parseArgs, validateFlags } from "../packages/cli/src/args.ts";
@@ -421,6 +422,16 @@ function sampleEvidence(): EvidenceRecord {
     failures: [],
     repairs: [],
     rollbacks: [],
+    acceptanceCoverage: [
+      {
+        criterion: "POST /api/login accepts valid credentials",
+        covered: true,
+        signals: ["/api/login"],
+        matchedSignals: ["/api/login"],
+        concrete: true,
+      },
+    ],
+    uncoveredCriteria: [],
     finalDiff: "",
     verification: {
       id: "ver_test",
@@ -440,6 +451,120 @@ function sampleEvidence(): EvidenceRecord {
     digest: "",
   };
 }
+
+describe("acceptance criteria coverage", () => {
+  const layer = (l: VerificationLayer, ok: boolean, ran = true): LayerRun => ({
+    layer: l,
+    result: { layer: l, ok, ran, summary: ran ? (ok ? "pass" : "fail") : "not declared" },
+  });
+
+  // These tests encode a real, observed product failure: a change passed every check the
+  // project declared while implementing none of the request, because the suite described
+  // existing behaviour. The verdict said VERIFIED. These tests make that impossible.
+
+  test("extracts HTTP routes as concrete signals", () => {
+    const { signals, concrete } = extractSignals("POST /api/login accepts valid credentials");
+    expect(signals).toContain("/api/login");
+    expect(concrete).toBe(true);
+  });
+
+  test("extracts quoted literals as concrete signals", () => {
+    const { signals, concrete } = extractSignals('the response must contain "unauthorized"');
+    expect(signals).toContain("unauthorized");
+    expect(concrete).toBe(true);
+  });
+
+  test("ignores ordinary prose and HTTP methods", () => {
+    const { signals } = extractSignals("the change should keep working and continue to be reachable");
+    expect(signals).not.toContain("get");
+    expect(signals).not.toContain("keep");
+    expect(signals).not.toContain("working");
+  });
+
+  test("does not treat a file path as an HTTP route", () => {
+    const { signals } = extractSignals("edit src/app.ts to add the handler");
+    expect(signals).not.toContain("/app.ts");
+  });
+
+  test("marks a criterion uncovered when no test references its route", () => {
+    const report = assessAcceptanceCoverage(
+      [
+        "POST /api/login accepts valid credentials and establishes a session",
+        "GET /api/me returns the authenticated user",
+        "GET /health remains reachable without a session",
+      ],
+      ["tests/app.test.ts"],
+      () => `
+        test("GET /health is public", () => {});
+        test("GET /api/me returns 401 without a session", () => {});
+      `,
+    );
+
+    expect(report.unassessable).toBe(false);
+    // The login route is named by a criterion and referenced by no test: a real gap.
+    expect(report.uncoveredConcrete).toHaveLength(1);
+    expect(report.uncoveredConcrete[0]).toContain("/api/login");
+    // The other two surfaces are genuinely referenced.
+    expect(report.coveredCount).toBe(2);
+  });
+
+  test("does not accuse a change of missing something it could not parse", () => {
+    const report = assessAcceptanceCoverage(["it should be nicer"], ["tests/a.test.ts"], () => "test('x', () => {})");
+    expect(report.uncoveredConcrete).toHaveLength(0);
+  });
+
+  test("a criterion naming a declared command is covered by the layer that runs it", () => {
+    // Observed false positive: "Running `npm run test` must pass" was flagged as uncovered
+    // because no *test file* contains the string "npm run test". That would have trained
+    // developers to ignore this check, which is worse than not having it.
+    const report = assessAcceptanceCoverage(
+      ["Running `npm run test` must pass, confirming the existing suite still passes"],
+      ["tests/app.test.ts"],
+      () => "test('x', () => {})",
+      { knownCommands: ["npm run test", "tsc --noEmit"] },
+    );
+    expect(report.uncoveredConcrete).toHaveLength(0);
+    expect(report.results[0]!.covered).toBe(true);
+    expect(report.results[0]!.concrete).toBe(false);
+  });
+
+  test("a shell command in quotes is not treated as a testable surface", () => {
+    const { signals, concrete } = extractSignals("the change must keep `npm run build` working");
+    expect(signals).not.toContain("npm run build");
+    expect(concrete).toBe(false);
+  });
+
+  test("reports coverage as unassessable when the repository has no tests", () => {
+    const report = assessAcceptanceCoverage(["POST /api/login"], [], () => undefined);
+    expect(report.unassessable).toBe(true);
+    expect(report.uncoveredConcrete).toHaveLength(0);
+  });
+
+  test("an untested concrete criterion caps the verdict at PARTIALLY_VERIFIED", () => {
+    // Every layer passes. Without coverage checking this would be VERIFIED — which is the
+    // false confidence that motivated this module.
+    const layers = [layer("security", true), layer("unit", true), layer("typecheck", true)];
+
+    const withoutCoverage = computeVerdict(layers);
+    expect(withoutCoverage.verdict).toBe("VERIFIED");
+
+    const withCoverage = computeVerdict(layers, {
+      uncoveredConcrete: ["POST /api/login accepts valid credentials"],
+      unassessable: false,
+    });
+    expect(withCoverage.verdict).toBe("PARTIALLY_VERIFIED");
+    expect(withCoverage.rationale.some((r) => r.includes("/api/login"))).toBe(true);
+  });
+
+  test("coverage checking does not rescue a failing layer", () => {
+    // The cap only ever lowers a verdict; it must never raise one.
+    const v = computeVerdict([layer("security", true), layer("unit", false)], {
+      uncoveredConcrete: [],
+      unassessable: false,
+    });
+    expect(v.verdict).toBe("UNVERIFIED");
+  });
+});
 
 describe("evidence records", () => {
   test("digest is stable for identical substance", () => {

@@ -12,6 +12,7 @@ import type {
 import { newId, nowIso, runCommand, truncate } from "@attest/shared";
 import { failureExcerpt, parseTestOutput, type ParsedCounts } from "./parse.ts";
 import { isBlocking, scanChanges, type SecurityFinding } from "./security.ts";
+import { assessAcceptanceCoverage, looksLikeTestFile, type CoverageReport } from "./coverage.ts";
 
 /** The repository's own health before we touch anything. */
 export interface Baseline {
@@ -36,6 +37,8 @@ export interface LayerRun {
 
 export interface VerificationOptions {
   taskId: string;
+  /** Restatements of the request, used to check that something tests them. */
+  acceptanceCriteria?: string[];
   executionId: string;
   /** Repo-relative paths this task changed. Security scanning is scoped to these. */
   changedPaths: string[];
@@ -52,6 +55,8 @@ export interface VerificationOutcome {
   findings: SecurityFinding[];
   /** The single most useful text to hand to a diagnosis model. */
   failureSignal: string;
+  /** Which acceptance criteria are exercised by the repository's tests. */
+  coverage: CoverageReport;
 }
 
 const REQUIRED_LAYERS: VerificationLayer[] = ["security", "unit"];
@@ -227,8 +232,24 @@ export class VerificationEngine {
       );
     }
 
+    // Did anything in this repository actually exercise what the task asked for?
+    // The analysed test list plus any test file this task just created, so that an agent
+    // adding a test for the behaviour it built is credited for it.
+    const testFiles = [
+      ...new Set([
+        ...this.project.testFiles,
+        ...opts.changedPaths.filter((p) => looksLikeTestFile(p)),
+      ]),
+    ];
+    const coverage = assessAcceptanceCoverage(
+      opts.acceptanceCriteria ?? [],
+      testFiles,
+      (f) => readSync(path.join(this.root, f)),
+      { knownCommands: this.project.commands.map((c) => c.command) },
+    );
+
     const finishedAt = nowIso();
-    const { verdict, rationale } = computeVerdict(layers);
+    const { verdict, rationale } = computeVerdict(layers, coverage);
 
     const verification: VerificationResult = {
       id: newId("ver"),
@@ -250,7 +271,7 @@ export class VerificationEngine {
         ? blocking.map((f) => `${f.path}:${f.line} [${f.rule}] ${f.excerpt}`).join("\n")
         : "";
 
-    return { verification, layers, findings, failureSignal };
+    return { verification, layers, findings, failureSignal, coverage };
   }
 }
 
@@ -259,7 +280,10 @@ export class VerificationEngine {
  * is pure: given the same layer results it always returns the same answer. A model
  * can influence the *inputs* (by writing code) but never the verdict itself.
  */
-export function computeVerdict(layers: LayerRun[]): { verdict: Verdict; rationale: string[] } {
+export function computeVerdict(
+  layers: LayerRun[],
+  coverage?: Pick<CoverageReport, "uncoveredConcrete" | "unassessable">,
+): { verdict: Verdict; rationale: string[] } {
   const rationale: string[] = [];
   const byLayer = new Map(layers.map((l) => [l.layer, l]));
 
@@ -309,10 +333,36 @@ export function computeVerdict(layers: LayerRun[]): { verdict: Verdict; rational
   const skippedNote = optionalSkipped.length
     ? [`not checked (not declared by this project): ${optionalSkipped.join(", ")}`]
     : [];
+
+  // The final gate: every check passed, but did anything check what was actually asked for?
+  //
+  // A change can pass a repository's entire suite while implementing none of the request,
+  // because the suite describes existing behaviour. Reporting VERIFIED there would be
+  // technically accurate and practically misleading — the exact failure this project exists
+  // to prevent. So an acceptance criterion that names a concrete surface (a route, a quoted
+  // literal) and is referenced by no test caps the verdict at PARTIALLY_VERIFIED.
+  if (coverage && !coverage.unassessable && coverage.uncoveredConcrete.length > 0) {
+    return {
+      verdict: "PARTIALLY_VERIFIED",
+      rationale: [
+        ...rationale,
+        ...skippedNote,
+        ...coverage.uncoveredConcrete.map(
+          (c) => `⚠ no test exercises this acceptance criterion: "${truncateCriterion(c)}"`,
+        ),
+        "⚠ every executed check passed, but at least one requested behaviour is untested, so the change cannot be called fully verified",
+      ],
+    };
+  }
+
   return {
     verdict: "VERIFIED",
     rationale: [...rationale, ...skippedNote],
   };
+}
+
+function truncateCriterion(c: string): string {
+  return c.length > 110 ? `${c.slice(0, 107)}…` : c;
 }
 
 function readSync(file: string): string | undefined {

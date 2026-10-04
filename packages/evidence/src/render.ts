@@ -152,7 +152,36 @@ export function renderEvidenceMarkdown(record: EvidenceRecord, opts: RenderOptio
   for (const r of record.verdictReasons) push(`- ${r}`);
   push();
 
-  push(`## 12. What you should still check yourself`);
+  push(`## 12. Acceptance criteria coverage`);
+  push();
+  if (record.acceptanceCoverage.length === 0) {
+    push("_No acceptance criteria were recorded for this task._");
+  } else {
+    push(`| Criterion | Exercised by a test? |`);
+    push(`|---|---|`);
+    for (const c of record.acceptanceCoverage) {
+      // "not assessable" must win over "yes": a criterion we could not parse into a signal
+      // is treated as covered so we never accuse a change of missing something we failed to
+      // understand — but reporting that as "yes" would overstate what was checked.
+      const label =
+        c.signals.length === 0
+          ? "not assessable"
+          : c.covered
+            ? `yes — ${c.matchedSignals.slice(0, 3).map((m) => `\`${m}\``).join(", ")}`
+            : c.concrete
+              ? "**no**"
+              : "not assessable";
+      push(`| ${c.criterion.slice(0, 120)} | ${label} |`);
+    }
+    push();
+    push(
+      `This is a smoke alarm, not proof: it checks whether a test *references* the surface ` +
+        `named by the criterion, not whether the test asserts anything useful.`,
+    );
+  }
+  push();
+
+  push(`## 13. What you should still check yourself`);
   push();
   if (record.residualRisk.length === 0) {
     push("_Nothing outstanding that the runtime could identify._");
@@ -162,7 +191,7 @@ export function renderEvidenceMarkdown(record: EvidenceRecord, opts: RenderOptio
   push();
 
   if (opts.includeDiff && record.finalDiff) {
-    push(`## 13. Final diff`);
+    push(`## 14. Final diff`);
     push();
     push("```diff");
     push(record.finalDiff.slice(0, 20_000));
@@ -194,6 +223,7 @@ export function renderEvidenceSummary(record: EvidenceRecord): string {
   );
   if (record.failures.length) lines.push(`  failures   : ${record.failures.length}`);
   if (record.rollbacks.length) lines.push(`  rollbacks  : ${record.rollbacks.length}`);
+  if (record.uncoveredCriteria.length) lines.push(`  untested   : ${record.uncoveredCriteria.length} acceptance criterion(ia)`);
   if (record.residualRisk.length) lines.push(`  residual   : ${record.residualRisk.length} item(s)`);
   return lines.join("\n");
 }

@@ -201,8 +201,10 @@ describe("model router selection", () => {
   });
 
   test("fails loudly when no model is reachable", async () => {
-    const router = makeRouter();
-    // An Ollama provider pointed at a port nothing listens on.
+    // Point the router's own provider at a dead port. Without this the test would depend on
+    // whether the developer happens to have Ollama running, which is not a property of the
+    // code under test.
+    const router = makeRouter({ ATTEST_OLLAMA_URL: "http://127.0.0.1:1" });
     router.registerProvider(new OllamaProvider("http://127.0.0.1:1", 500));
     await expect(router.complete({ role: "planner", system: "s", prompt: "p" })).rejects.toThrow(
       /no model available|all models failed/,

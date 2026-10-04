@@ -17,6 +17,16 @@ export interface RouterConfig {
   /** Set false to disable the hosted gateway entirely. */
   allowGateway: boolean;
   /**
+   * Disable "thinking" output on local models that support it.
+   *
+   * Gemma 4 and other reasoning models spend their token budget on a hidden reasoning
+   * trace before producing an answer. Measured on this machine: the same JSON probe cost
+   * 139 tokens with thinking and 6 without, and a small `num_predict` was consumed
+   * entirely by the reasoning trace, returning empty content. Since every role here has a
+   * strict JSON contract, the reasoning trace adds cost without adding correctness.
+   */
+  ollamaDisableThinking: boolean;
+  /**
    * When false (the default), models whose weights are not open are refused by the
    * router. This is what makes "open-source AI is core, not decoration" an enforced
    * property of the runtime rather than a claim in a README.
@@ -39,6 +49,8 @@ export function loadRouterConfig(env: Env = process.env): RouterConfig {
     offlineOnly: offline,
     timeoutMs: Number(env.ATTEST_MODEL_TIMEOUT_MS ?? 180_000),
     allowGateway: !offline && env.ATTEST_DISABLE_GATEWAY !== "1",
+    // Default on: thinking costs tokens and we need deterministic JSON.
+    ollamaDisableThinking: env.ATTEST_OLLAMA_THINKING !== "1",
     allowProprietary:
       env.ATTEST_ALLOW_PROPRIETARY === "1" || env.ATTEST_ALLOW_PROPRIETARY === "true",
   };

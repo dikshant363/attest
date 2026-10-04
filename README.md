@@ -48,6 +48,7 @@ Five properties are enforced in code, not by convention:
 | **A verdict is never authored by a model** | `computeVerdict()` is a pure function over executed layer results. Models influence the *inputs*; they cannot write the verdict. |
 | **A failed attempt is rolled back before it is repaired** | The repair prompt is built from a workspace that has *already* been restored to known-good, and the restore is verified by tree hash. |
 | **Absence of evidence is never success** | A required layer that could not run produces `UNVERIFIED`, not `VERIFIED`. |
+| **Passing checks is not the same as doing the work** | An acceptance criterion naming a concrete surface that no test references caps the verdict at `PARTIALLY_VERIFIED`. |
 | **Open-source AI is core, not decoration** | The router **refuses** models whose weights are not open by default. Opting out requires `ATTEST_ALLOW_PROPRIETARY=1`. |
 
 ## The evidence record
@@ -179,13 +180,14 @@ examples/auth-fixture/   the demonstration target repository
 ## Verified, not claimed
 
 ```
-npm run selftest      # typecheck + lint + 67 tests
+npm run selftest      # typecheck + lint + 80 tests
 ```
 
-`npm test` runs 67 tests, including end-to-end tests that prove the recovery loop against a real
+`npm test` runs 80 tests, including end-to-end tests that prove the recovery loop against a real
 repository with a real `node:test` suite: the regression is detected, the rollback is verified
-byte-for-byte, the repair is applied, and a second scenario proves that when the repair *also*
-fails the workspace is left exactly as it was found.
+byte-for-byte, the repair is applied, and further scenarios prove that when the repair *also* fails
+the workspace is left exactly as it was found — and that a change passing every check while
+implementing none of the request cannot come back `VERIFIED`.
 
 ## Observability
 
@@ -222,6 +224,9 @@ See [`docs/SECURITY.md`](docs/SECURITY.md) and [`docs/THREAT_MODEL.md`](docs/THR
 
 - Verification is only as strong as the project's own checks. If a repository has no tests, Attest
   says so and the verdict will not be `VERIFIED`.
+- The acceptance-criteria coverage check is a **heuristic**: it detects whether a test *references*
+  the surface a criterion names, not whether the test asserts anything useful. It is a smoke alarm,
+  and the record says so.
 - The security layer is a focused, in-process rule set, not a substitute for a dedicated scanner.
 - The web control centre is read-only; approvals happen through the CLI.
 - Sessions, tasks and evidence live in a single JSON document under `.attest/`. That is a

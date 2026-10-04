@@ -111,8 +111,21 @@ export function verifyCredentials(username: unknown, password: unknown): Session
 ];
 
 /**
- * The recorded repair: scope the guard to the API surface, and evaluate the login route
- * before it, so the public health check and the 404 contract both survive.
+ * The recorded repair.
+ *
+ * Three parts, and the third one matters as much as the first two:
+ *
+ *   1. Scope the session guard to the /api/ surface, so the public health check and the 404
+ *      contract both survive.
+ *   2. Evaluate the login route before the guard, since logging in cannot require a session.
+ *   3. **Add a test for the behaviour that was just built.**
+ *
+ * The third part is not decoration. Without it, the repair would implement `/api/login` and
+ * nothing in the repository would exercise it — and Attest's acceptance-criteria coverage
+ * check would (correctly) cap the verdict at PARTIALLY_VERIFIED, because every check passing
+ * is not the same as the requested behaviour being tested. That check exists because a live
+ * run produced exactly that situation: a `VERIFIED` verdict on a change that implemented
+ * none of the request.
  */
 export const DEMO_REPAIR = [
   {
@@ -208,6 +221,57 @@ export function verifyCredentials(username: unknown, password: unknown): Session
   if (expected === undefined || expected !== password) return undefined;
   return { userId: username };
 }
+`,
+  },
+  {
+    // A new test file that exercises the behaviour the repair just added. Attest's coverage
+    // check looks at changed files as well as the analysed test list, so a test added by the
+    // change is credited for covering the criterion it tests.
+    path: "tests/auth.test.ts",
+    content: `/**
+ * Tests for session authentication.
+ *
+ * Added alongside the implementation: a route that no test exercises cannot be called
+ * verified, so the login and session paths get explicit coverage here.
+ */
+import { test, describe } from "node:test";
+import assert from "node:assert/strict";
+import { handle } from "../src/app.ts";
+
+describe("session authentication", () => {
+  test("POST /api/login returns a session cookie for valid credentials", () => {
+    const res = handle({
+      method: "POST",
+      path: "/api/login",
+      headers: {},
+      body: { username: "ada", password: "correct-horse-battery-staple" },
+    });
+    assert.equal(res.status, 200);
+    assert.equal((res.body as { userId: string }).userId, "ada");
+    assert.match(String(res.headers?.["set-cookie"]), /session=ada/);
+  });
+
+  test("POST /api/login rejects invalid credentials", () => {
+    const res = handle({
+      method: "POST",
+      path: "/api/login",
+      headers: {},
+      body: { username: "ada", password: "wrong-password" },
+    });
+    assert.equal(res.status, 401);
+  });
+
+  test("GET /api/me returns the user when a session is present", () => {
+    const res = handle({
+      method: "GET",
+      path: "/api/me",
+      headers: {},
+      session: { userId: "ada" },
+    });
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.body, { userId: "ada" });
+  });
+});
 `,
   },
 ];

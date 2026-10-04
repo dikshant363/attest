@@ -158,6 +158,7 @@ Five properties are enforced *in code*, not by convention:
 | A verdict is never authored by a model | `computeVerdict()` is a pure function over executed layer results. |
 | A failed attempt is rolled back before it is repaired | The repair prompt is built from a workspace that has already been restored, verified by tree hash. |
 | Absence of evidence is never success | A required layer that could not run produces `UNVERIFIED`, not `VERIFIED`. |
+| Passing checks is not doing the work | An acceptance criterion that names a concrete surface no test references caps the verdict at `PARTIALLY_VERIFIED`. |
 | Open-source AI is core, not decoration | The router **refuses** non-open-weight models by default. |
 
 That fourth row is four lines of code and it's the most important thing I wrote. The temptation to let a `VERIFIED` verdict be reachable on a project with no tests is enormous, and it would have made the whole record worthless.
@@ -240,7 +241,7 @@ I chose Gemma 4 over Gemma 3 for a specific, verifiable reason: Gemma 3 does **n
 
 ### Best Use of Sentry Agent Tracing
 
-<!-- Fill in with a real trace link + screenshot after the DSN is configured. -->
+<!-- TRACE LINK + SCREENSHOT GO HERE once the DSN is configured -->
 
 Attest emits three kinds of span:
 
@@ -259,6 +260,92 @@ Tracing is opt-in via `SENTRY_DSN` and costs nothing when disabled: the SDK is n
 <!-- Fill in with the deployed URL after connecting the repo. -->
 
 The read-only control centre — verdicts, the latest evidence record, verification layers, model usage with weight class, constraints, and the audit log — is deployed on Render. It's a Next.js app that reads the Project World directly from disk, with no API layer and no cache, because a second source of truth is a second thing that can be wrong.
+
+## I ran it on a real model, and it lied to me
+
+Everything above is the product working. Here is the part where it didn't, because it's the most useful thing I can tell you.
+
+Near the end I stopped using the scripted demo and ran the live path on the local model. Real repository, real `node:test` suite, no replayed edits — `gemma4:e2b` doing its own reading, planning and writing, entirely offline.
+
+First run: the model edited `src/server.ts` and broke the HTTP server. The test suite caught it. Attest rolled back, diagnosed, attempted a repair that also failed, rolled back again, and returned:
+
+```
+↩️  ROLLED BACK
+  files      : 1 changed
+  layers     : security=pass unit=FAIL typecheck=pass regression=FAIL
+  failures   : 2
+  rollbacks  : 2
+```
+
+**The workspace was byte-for-byte identical to how it started**, all five tests still passed, and the record said plainly that nothing had been applied. A 2B model had just tried and failed to break my friend's repository, and the repository was fine. That's the safety property, demonstrated live, by accident, on a model that wasn't good enough to succeed.
+
+Second run: the model succeeded. It was asked to add session authentication, it made a change that violated the "`/api/me` must return 401 without a session" constraint, the tests caught it, it was rolled back, and then — this is the part I didn't expect — **the model diagnosed its own violation**:
+
+> *"The previous change modified the logic for `/api/me` to return a 200 OK with user data if a session existed, which violates the hard constraint that GET /api/me must return 401 when there is no session."*
+
+Then it fixed it. `VERIFIED`, 5/5.
+
+Great. Except I read the diff.
+
+The model had added a session check to `/api/me` and **never created a login route**. It left an unreachable duplicate `return` statement behind. It had implemented essentially none of what was asked.
+
+And every layer passed:
+
+```
+✓ security: no findings in 1 changed file(s)
+✓ unit: 5/5 passing
+✓ typecheck: exited 0
+✓ regression: baseline preserved (5 → 5 passing)
+VERDICT VERIFIED
+```
+
+**My tool told me a feature was done when it wasn't.**
+
+### Why this happened, and why it matters
+
+The verdict function wasn't wrong. Every check that ran, passed. The bug is deeper and more interesting than that.
+
+A repository's test suite describes the behaviour that **already exists**. Adding a new behaviour doesn't make any existing test fail. So a suite that's green before a change is still green after a change that does nothing useful. "All checks pass" is a *much* weaker statement than it feels like — and I had been reading it as "the request is satisfied".
+
+The engine answered **"did the checks pass?"** while I was asking **"did you do what I asked?"**
+
+This is the exact failure mode Attest exists to prevent. My own tool produced it. If I hadn't run the live path and actually read the diff, this post would have ended with me claiming a guarantee I hadn't built.
+
+### The fix
+
+I added a fifth check, and it gates the verdict.
+
+For each acceptance criterion, Attest extracts the concrete things it names — HTTP routes, quoted literals, distinctive identifiers — and searches the repository's test files for them, *including any test file the change itself created*. A criterion that names a concrete surface which appears in no test caps the verdict:
+
+```
+VERDICT  PARTIALLY_VERIFIED
+  ✓ security: no findings in 3 changed file(s) (1 exempt)
+  ✓ unit: 8/8 passing
+  ✓ typecheck: exited 0
+  ✓ regression: baseline preserved (5 → 8 passing)
+  ⚠ no test exercises this acceptance criterion:
+      "POST /api/login accepts valid credentials and establishes a session"
+  ⚠ every executed check passed, but at least one requested behaviour is
+    untested, so the change cannot be called fully verified
+```
+
+The cap is deliberate: it can only ever **lower** a verdict, never raise one. And the criterion shows up in the residual-risk section, which is the part a developer actually reads.
+
+The recorded demo now also adds a test for the login route — which is what a competent engineer does, and what makes the coverage check pass honestly.
+
+### Two bugs I found while fixing it
+
+**1. My loop was throwing the new gate away.** The verification engine computed a coverage-aware verdict; then `AgentLoop` called `computeVerdict()` *again* without the coverage, and overwrote it. A safety gate that gets bypassed by a redundant re-computation is not a gate. The loop now reads the engine's verdict; there is exactly one place a verdict is produced.
+
+**2. My new check cried wolf immediately.** It flagged the criterion *"Running `npm run test` must pass"* as untested, because no test file contains the string `npm run test` — even though the `unit` layer runs precisely that. A check that produces false alarms teaches developers to ignore it, which is worse than not shipping it. Criteria that name a project-declared command are now covered by definition.
+
+### The honest limitation
+
+The coverage check is a **heuristic**, and I've labelled it as one everywhere it appears. It detects whether a test *references* the surface a criterion names — not whether the test asserts anything meaningful. It could be satisfied by an empty test. It's a smoke alarm, not a fire-suppression system.
+
+But a smoke alarm that says *"nothing here tests the route you just added"* is worth having. And claiming more than that would just be repeating my original mistake one level up.
+
+**The real lesson:** the most valuable thing that happened in this build wasn't the architecture. It was running the tool on itself and reading the output honestly. A passing test suite is evidence about the tests, not about the product — which is, more or less, the entire thesis.
 
 ## What I learned
 
@@ -293,7 +380,7 @@ node bin/attest.mjs demo --dir examples/auth-fixture
 node bin/attest.mjs evidence --markdown --diff
 ```
 
-67 tests, including two end-to-end proofs of the recovery loop against a real repository with a real test suite. Six runtime dependencies.
+80 tests, including four end-to-end proofs: the recovery loop, safe failure when repair is impossible, the coverage gate catching an untested change, and a change that adds its own test being credited for it. Six runtime dependencies.
 
 The docs are the part I'd point a reviewer at: [`ARCHITECTURE.md`](https://github.com/dikshant363/attest/blob/main/docs/ARCHITECTURE.md) for the design and its trade-offs, [`SECURITY.md`](https://github.com/dikshant363/attest/blob/main/docs/SECURITY.md) and [`THREAT_MODEL.md`](https://github.com/dikshant363/attest/blob/main/docs/THREAT_MODEL.md) for what it does *not* protect against, [`DECISIONS.md`](https://github.com/dikshant363/attest/blob/main/docs/DECISIONS.md) for the reasoning — including the decision that was wrong.
 
