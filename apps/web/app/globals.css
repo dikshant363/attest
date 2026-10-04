@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+/*
+  Design intent: this is a control centre for an autonomous system, not a chat app.
+  The visual language is deliberately closer to a terminal and an observability dashboard
+  than to a conversation: dense, monospaced where precision matters, and colour reserved
+  exclusively for verdicts and states. Colour is never decorative here, because the whole
+  product is about being able to tell at a glance whether something is trustworthy.
+*/
+@theme {
+  --color-ink-950: #08090c;
+  --color-ink-900: #0c0e13;
+  --color-ink-850: #11141b;
+  --color-ink-800: #171b24;
+  --color-ink-700: #232936;
+  --color-ink-600: #333b4d;
+  --color-ink-400: #737f96;
+  --color-ink-300: #9aa5b8;
+  --color-ink-100: #e4e8ef;
+
+  --color-verify: #3fb950;
+  --color-caution: #d29922;
+  --color-danger: #f85149;
+  --color-rollback: #58a6ff;
+  --color-accent: #a371f7;
+
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+}
+
+html,
+body {
+  background-color: var(--color-ink-950);
+  color: var(--color-ink-100);
+}
+
+body {
+  font-feature-settings: "cv11", "ss01";
+}
+
+.card {
+  background-color: var(--color-ink-900);
+  border: 1px solid var(--color-ink-800);
+  border-radius: 0.5rem;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+}
+
+.hairline {
+  border-color: var(--color-ink-800);
+}
+
+/* Diff rendering in the evidence view. */
+.diff-add {
+  background-color: color-mix(in srgb, var(--color-verify) 14%, transparent);
+}
+.diff-del {
+  background-color: color-mix(in srgb, var(--color-danger) 14%, transparent);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-ink-700);
+  border-radius: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}

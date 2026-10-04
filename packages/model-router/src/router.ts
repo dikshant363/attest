@@ -30,7 +30,15 @@ export interface SelectionOptions {
   excludeModels?: string[];
 }
 
-/** Per-role preference weights. Kept explicit so routing is reviewable, not vibes. */
+/**
+ * Per-role preference weights. Kept explicit so routing is reviewable, not vibes.
+ *
+ * `minCodeStrength` is a HARD filter, so it is used sparingly. It would be easy to set
+ * "repairer requires 0.55" and feel rigorous, but that silently excludes every small local
+ * model from the repair step — which would mean the runtime quietly stops working offline
+ * exactly when it matters most. Repair instead prefers a stronger model through the
+ * difficulty weighting below, while keeping weak models eligible.
+ */
 interface RoleProfile {
   needsStructured: boolean;
   minCodeStrength: number;
@@ -42,7 +50,8 @@ interface RoleProfile {
 const ROLE_PROFILES: Record<string, RoleProfile> = {
   planner: { needsStructured: true, minCodeStrength: 0.0, preferOffline: true, escalateOnDifficulty: 0.7 },
   diagnoser: { needsStructured: true, minCodeStrength: 0.0, preferOffline: true, escalateOnDifficulty: 0.6 },
-  repairer: { needsStructured: true, minCodeStrength: 0.55, preferOffline: true, escalateOnDifficulty: 0.5 },
+  // Note the 0.0: a 2B local model must remain eligible to repair, or the offline path dies.
+  repairer: { needsStructured: true, minCodeStrength: 0.0, preferOffline: true, escalateOnDifficulty: 0.5 },
   reviewer: { needsStructured: true, minCodeStrength: 0.0, preferOffline: false, escalateOnDifficulty: 0.4 },
   interpreter: { needsStructured: true, minCodeStrength: 0.0, preferOffline: true, escalateOnDifficulty: 0.5 },
   summarizer: { needsStructured: false, minCodeStrength: 0.0, preferOffline: true, escalateOnDifficulty: 0.9 },

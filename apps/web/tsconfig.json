@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["dom", "dom.iterable", "ES2023"],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "plugins": [{ "name": "next" }],
+    "paths": {
+      "@/*": ["./*"],
+      "@attest/shared": ["../../packages/shared/src/index.ts"],
+      "@attest/project-world": ["../../packages/project-world/src/index.ts"],
+      "@attest/model-router": ["../../packages/model-router/src/index.ts"],
+      "@attest/tool-runtime": ["../../packages/tool-runtime/src/index.ts"],
+      "@attest/verification": ["../../packages/verification/src/index.ts"],
+      "@attest/evidence": ["../../packages/evidence/src/index.ts"],
+      "@attest/agent-runtime": ["../../packages/agent-runtime/src/index.ts"],
+      "@attest/core": ["../../packages/core/src/index.ts"]
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}

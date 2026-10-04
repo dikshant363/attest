@@ -33,7 +33,9 @@ export function loadRouterConfig(env: Env = process.env): RouterConfig {
     gatewayModel: env.ATTEST_GATEWAY_MODEL ?? "gpt-oss-120b-medium",
     ollamaUrl: (env.ATTEST_OLLAMA_URL ?? "http://127.0.0.1:11434").replace(/\/+$/, ""),
     ollamaModel: env.ATTEST_OLLAMA_MODEL ?? "gemma4:e2b",
-    ollamaFallbackModel: env.ATTEST_OLLAMA_FALLBACK_MODEL ?? "gemma3:4b",
+    // Alternative local driver. Qwen3.5 is Apache-2.0, supports tools, and has a 256K
+    // context window, which makes it the better choice for a repository with a large tree.
+    ollamaFallbackModel: env.ATTEST_OLLAMA_FALLBACK_MODEL ?? "qwen3.5:4b",
     offlineOnly: offline,
     timeoutMs: Number(env.ATTEST_MODEL_TIMEOUT_MS ?? 180_000),
     allowGateway: !offline && env.ATTEST_DISABLE_GATEWAY !== "1",
